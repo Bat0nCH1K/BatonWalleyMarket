@@ -1,4 +1,4 @@
-// Wasteland Market Terminal — core.js v5.1
+// Wasteland Market Terminal — core.js
 const STORAGE_ITEMS = 'wl_items_v4';
 const STORAGE_PRICES = 'wl_prices_v4';
 const STORAGE_TRADES = 'wl_trades_v4';
@@ -41,8 +41,7 @@ function addItem(name, type, lotSize) {
     const existing = items.find(i => i.name === name);
     if (existing) { existing.lotSize = lotSize || existing.lotSize || 1; if (type) existing.type = type; saveAll(); return; }
     items.push({ name, type, lotSize: lotSize || 1 });
-    prices[name] = [];
-    predictions[name] = [];
+    prices[name] = []; predictions[name] = [];
     saveAll();
 }
 
@@ -157,4 +156,4 @@ function getGlobalAccuracy() {
         correct += withActual.filter(p => (p.predicted > 0.5 && p.actual === 1) || (p.predicted <= 0.5 && p.actual === 0)).length;
     });
     return total > 0 ? Math.round((correct / total) * 100) : 0;
-        }
+}
