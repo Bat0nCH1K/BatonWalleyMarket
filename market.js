@@ -161,10 +161,18 @@ function renderItemGraph() {
 // === СКЛАД ===
 function updateStorageSelect() { const s = document.getElementById('storageItemSelect'); if (s) s.innerHTML = items.map(i => `<option value="${i.name}">${i.name}</option>`).join(''); }
 function addToStorage() {
-    const item = document.getElementById('storageItemSelect').value, qty = parseInt(document.getElementById('storageQty').value), buyPrice = parseFloat(document.getElementById('storageBuyPrice').value), modded = document.getElementById('storageModded').checked;
-    if (!item || isNaN(qty) || isNaN(buyPrice)) { alert('Заполни'); return; }
-    addToStorage(item, qty, buyPrice, modded);
-    document.getElementById('storageBuyPrice').value = ''; document.getElementById('storageQty').value = '1'; renderStorage();
+    const item = document.getElementById('storageItemSelect').value;
+    const qty = parseInt(document.getElementById('storageQty').value) || 1;
+    const modded = document.getElementById('storageModded').checked;
+    if (!item) { alert('Выбери предмет'); return; }
+    
+    const data = prices[item] || [];
+    const lastPrice = data.length > 0 ? data[data.length - 1].buy : 0;
+    
+    addToStorage(item, qty, lastPrice, modded);
+    document.getElementById('storageQty').value = '1';
+    document.getElementById('storageModded').checked = false;
+    renderStorage();
 }
 function renderStorage() {
     const list = document.getElementById('storageList'), totalEl = document.getElementById('storageTotal');
