@@ -156,4 +156,4 @@ function getGlobalAccuracy() {
         correct += withActual.filter(p => (p.predicted > 0.5 && p.actual === 1) || (p.predicted <= 0.5 && p.actual === 0)).length;
     });
     return total > 0 ? Math.round((correct / total) * 100) : 0;
-}
+                       }
