@@ -125,9 +125,9 @@ function getPrediction(item) {
     const variance = buys.map(b => (b - avgBuy) ** 2).reduce((a,b) => a+b, 0) / buys.length;
     const volatility = Math.sqrt(variance);
     let signal = 0, confidence = 0.5, text = '', cls = 'stable';
-    if (trend > 3) { signal = 0; text = '📈 ЦЕНА РАСТЁТ — продавать или ждать'; cls = 'up'; }
-    else if (trend < -3) { signal = 1; text = '📉 ЦЕНА ПАДАЕТ — хороший момент для покупки'; cls = 'down'; }
-    else { signal = 0.5; text = '📊 ЦЕНА СТАБИЛЬНА — можно торговать в коридоре'; cls = 'stable'; }
+    if (trend > 1.5) { signal = 0; text = '📈 ЦЕНА РАСТЁТ — продавать или ждать'; cls = 'up'; }
+    else if (trend < -1.5) { signal = 1; text = '📉 ЦЕНА ПАДАЕТ — хороший момент для покупки'; cls = 'down'; }
+    else { signal = 0.1; text = '📊 ЦЕНА СТАБИЛЬНА — можно торговать в коридоре'; cls = 'stable'; }
     const lastBuy = buys[buys.length - 1];
     const lastSell = sells[buys.length - 1];
     if (lastBuy < avgBuy * 0.95) { text += '\n💡 ЦЕНА НИЖЕ СРЕДНЕГО — покупать!'; signal = 1; cls = 'down'; }
