@@ -88,8 +88,9 @@ function addTrade(item, buyPrice, sellPrice) {
 
 function addToStorage(item, qty, buyPrice, modded) {
     if (!item || isNaN(qty)) return;
-    if (!buyPrice || isNaN(buyPrice)) buyPrice = 0;
-    storageItems.push({ item, qty, buyPrice, modded, date: new Date().toISOString() });
+    // Разрешаем buyPrice = 0 (бесплатно получил)
+    if (buyPrice === undefined || buyPrice === null) buyPrice = 0;
+    storageItems.push({ item, qty, buyPrice: Number(buyPrice) || 0, modded, date: new Date().toISOString() });
     saveAll();
 }
 
