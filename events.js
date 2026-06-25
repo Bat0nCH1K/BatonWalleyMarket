@@ -1,4 +1,4 @@
-// Wasteland Market Terminal — events.js (события + календарь + цели)
+// Wasteland Market Terminal — events.js v2 (события + цели)
 let calendarYear, calendarMonth;
 
 function submitEvent() {
@@ -66,7 +66,7 @@ function submitGoal() {
     const text = document.getElementById('goalText').value.trim();
     const target = parseFloat(document.getElementById('goalTarget').value);
     const current = parseFloat(document.getElementById('goalCurrent').value) || 0;
-    if (!text || isNaN(target)) { alert('Заполни'); return; }
+    if (!text || isNaN(target)) { alert('Заполни описание и цель'); return; }
     addGoal(text, target, current);
     document.getElementById('goalText').value = '';
     document.getElementById('goalTarget').value = '';
@@ -78,12 +78,24 @@ function renderGoals() {
     const list = document.getElementById('goalsList');
     if (!list) return;
     if (goals.length === 0) { list.innerHTML = '<p style="color:#888;">Нет целей</p>'; return; }
+    // Сортировка: сначала невыполненные, по приоритету (чем ближе к цели, тем выше)
+    goals.sort((a, b) => {
+        const pctA = a.target > 0 ? a.current / a.target : 0;
+        const pctB = b.target > 0 ? b.current / b.target : 0;
+        if (pctA >= 1 && pctB < 1) return 1;
+        if (pctB >= 1 && pctA < 1) return -1;
+        return pctB - pctA;
+    });
     list.innerHTML = goals.map((g, i) => {
-        const pct = Math.min(100, (g.current / g.target) * 100);
-        return `<div class="item-card"><div class="name">🎯 ${g.text}</div><div style="font-size:0.8em;">${g.current.toFixed(2)} / ${g.target.toFixed(2)} ₽</div><div style="height:6px;background:#1a2a2a;border-radius:3px;margin-top:4px;"><div style="height:100%;width:${pct}%;background:var(--accent);border-radius:3px;"></div></div><button class="delete-btn" onclick="deleteGoal(${i});renderGoals();">✕</button></div>`;
+        const pct = Math.min(100, g.target > 0 ? (g.current / g.target) * 100 : 0);
+        const done = pct >= 100;
+        return `<div class="item-card" style="${done ? 'opacity:0.6;' : ''}">
+            <div class="name">${done ? '✅' : '🎯'} ${g.text}</div>
+            <div style="font-size:0.8em;">${g.current.toFixed(0)} / ${g.target.toFixed(0)} голды</div>
+            <div style="height:6px;background:#1a2a2a;border-radius:3px;margin-top:4px;">
+                <div style="height:100%;width:${pct}%;background:${done?'var(--profit)':'var(--accent)'};border-radius:3px;"></div>
+            </div>
+            <button class="delete-btn" onclick="goals.splice(${i},1);saveAll();renderGoals();">✕</button>
+        </div>`;
     }).join('');
-}
-
-renderEvents();
-initCalendar();
-renderGoals();
+            }
