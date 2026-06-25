@@ -1,4 +1,4 @@
-// Wasteland Market Terminal — advisor.js v2
+// Wasteland Market Terminal — advisor.js v2 (сохранение истории)
 let advisorHistory = JSON.parse(localStorage.getItem('wl_advisor_history') || '[]');
 
 function getKey() {
@@ -24,8 +24,7 @@ function getMarketSummary() {
         storageItems.forEach(st => {
             const data = prices[st.item] || [], price = data.length>0?data[data.length-1].sell:0;
             const item = items.find(i=>i.name===st.item), ls = item?item.lotSize:1;
-            const val = price * st.qty;
-            tv += val;
+            const val = price * st.qty; tv += val;
             const inv = (st.buyPrice||0) * st.qty;
             const prof = val - inv;
             s += `${st.item} ×${st.qty}: вложено ${inv.toFixed(0)}, сейчас ${val.toFixed(0)} (${prof>=0?'+':''}${prof.toFixed(0)})${st.modded?' [МОД]':''}\n`;
@@ -38,7 +37,7 @@ function getMarketSummary() {
     
     if (goals.length > 0) {
         s += '\nЦЕЛИ:\n';
-        goals.forEach(g => s += `${g.text}: ${g.current.toFixed(0)}/${g.target.toFixed(0)} (${(g.current/g.target*100).toFixed(0)}%)\n`);
+        goals.forEach(g => s += `${g.text} (${balance.toFixed(0)}/${g.target.toFixed(0)})\n`);
     }
     
     if (trades.length > 0) {
