@@ -167,12 +167,13 @@ function addToStorage() {
     if (!item) { alert('Выбери предмет'); return; }
     
     const data = prices[item] || [];
-    const lastPrice = data.length > 0 ? data[data.length - 1].buy : 0;
+    const lastPrice = data.length > 0 ? Number(data[data.length - 1].buy) : 0;
     
     addToStorage(item, qty, lastPrice, modded);
     document.getElementById('storageQty').value = '1';
     document.getElementById('storageModded').checked = false;
     renderStorage();
+    log('✅ Добавлено на склад: ' + item + ' ×' + qty);
 }
 function renderStorage() {
     const list = document.getElementById('storageList'), totalEl = document.getElementById('storageTotal');
