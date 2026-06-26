@@ -1,4 +1,4 @@
-// Wasteland Market Terminal — market.js v13 (без потенциала, общее состояние)
+// Wasteland Market Terminal — market.js v15 (график по времени + пунктир прогноза)
 let currentScreen = 'items';
 let marketTab = 'overview';
 
@@ -28,7 +28,6 @@ function switchMarketTab(tab) {
     renderMarket();
 }
 
-// === ПРЕДМЕТЫ (с фильтром) ===
 function addItemForm() {
     const name = document.getElementById('newItemName').value.trim();
     const type = document.getElementById('newItemType').value;
@@ -127,56 +126,104 @@ function renderItemGraph() {
     const itemTrades = trades.filter(t => t.item === selectedItem);
     itemTrades.forEach(t => { allVals.push(t.buyPrice / lotSize); allVals.push(t.sellPrice / lotSize); });
     
-    const maxVal = Math.max(...allVals), minVal = Math.min(...allVals), range = maxVal - minVal || 1;
-    const W = 300, H = 130, pad = 30;
+    // Временные метки
+    const firstTime = new Date(data[0].time).getTime();
+    const lastTime = new Date(data[data.length-1].time).getTime();
+    const timeRange = lastTime - firstTime || 3600000; // минимум 1 час
+    const timeRangeHours = timeRange / 3600000;
     
+    // Добавляем точку прогноза через 24 часа
+    const forecastTime = lastTime + 86400000; // +24 часа
+    const forecastHoursFromStart = (forecastTime - firstTime) / 3600000;
+    const lastBuyVal = buys[buys.length - 1];
+    const forecastVal = lastBuyVal + pred.slope * 24; // slope * 24 часа
+    
+    const allForecast = [...allVals, forecastVal];
+    const maxVal = Math.max(...allForecast) * 1.05;
+    const minVal = Math.min(...allForecast) * 0.95;
+    const range = maxVal - minVal || 1;
+    
+    const totalTimeRange = Math.max(timeRangeHours, 24) + 24; // от первой записи до прогноза + запас
+    const W = 320, H = 150, padL = 45, padR = 20, padT = 15, padB = 25;
+    const plotW = W - padL - padR;
+    const plotH = H - padT - padB;
+    
+    // Сетка
     let grid = '';
     for (let i = 0; i <= 4; i++) {
-        const y = pad + (H - pad * 2) * i / 4;
-        grid += `<line x1="${pad}" y1="${y}" x2="${W - pad}" y2="${y}" stroke="#1a2a2a" stroke-width="0.5"/>`;
-        grid += `<text x="${pad - 4}" y="${y + 3}" fill="#555" font-size="8" text-anchor="end">${(maxVal - range * i / 4).toFixed(1)}</text>`;
+        const y = padT + plotH * i / 4;
+        grid += `<line x1="${padL}" y1="${y}" x2="${W - padR}" y2="${y}" stroke="#1a2a2a" stroke-width="0.5"/>`;
+        grid += `<text x="${padL - 5}" y="${y + 3}" fill="#555" font-size="8" text-anchor="end">${(maxVal - range * i / 4).toFixed(1)}</text>`;
     }
     
+    // Функция X по времени
+    function timeToX(t) {
+        const hoursFromStart = (t - firstTime) / 3600000;
+        return padL + (hoursFromStart / totalTimeRange) * plotW;
+    }
+    function valToY(v) {
+        return padT + plotH - ((v - minVal) / range) * plotH;
+    }
+    
+    // Точки данных и линия
     let dots = '';
+    let linePts = '';
     data.forEach((p, i) => {
-        const x = pad + (i / Math.max(data.length - 1, 1)) * (W - pad * 2);
-        const by = H - pad - ((p.buy / lotSize - minVal) / range) * (H - pad * 2);
-        const sy = H - pad - ((p.sell / lotSize - minVal) / range) * (H - pad * 2);
-        dots += `<circle cx="${x}" cy="${by}" r="3" fill="#d4a574" onclick="alert('${p.time.slice(0,16)}\nПокупка: ${(p.buy/lotSize).toFixed(2)}/шт\nПродажа: ${(p.sell/lotSize).toFixed(2)}/шт')" style="cursor:pointer;"/>`;
-        dots += `<circle cx="${x}" cy="${sy}" r="3" fill="#6aaa6a" opacity="0.7"/>`;
+        const t = new Date(p.time).getTime();
+        const x = timeToX(t);
+        const by = valToY(p.buy / lotSize);
+        const sy = valToY(p.sell / lotSize);
+        linePts += `${x},${by} `;
+        dots += `<circle cx="${x}" cy="${by}" r="3" fill="#d4a574" style="cursor:pointer;" onclick="alert('${p.time.slice(0,16)}\nПокупка: ${(p.buy/lotSize).toFixed(2)}/шт\nПродажа: ${(p.sell/lotSize).toFixed(2)}/шт')"/>`;
+        dots += `<circle cx="${x}" cy="${sy}" r="2.5" fill="#6aaa6a" opacity="0.7"/>`;
     });
     
+    // Маркеры сделок
     itemTrades.forEach(t => {
         const tradeTime = new Date(t.buyDate).getTime();
-        const firstTime = new Date(data[0].time).getTime();
-        const lastTime = new Date(data[data.length-1].time).getTime();
-        const timeRange = lastTime - firstTime || 1;
-        const x = pad + ((tradeTime - firstTime) / timeRange) * (W - pad * 2);
-        if (x >= pad && x <= W - pad) {
-            const by = H - pad - ((t.buyPrice / lotSize - minVal) / range) * (H - pad * 2);
-            const sy = H - pad - ((t.sellPrice / lotSize - minVal) / range) * (H - pad * 2);
-            dots += `<line x1="${x}" y1="${by}" x2="${sy}" stroke="#4fc3f7" stroke-width="2" stroke-dasharray="3,3"/>`;
-            dots += `<circle cx="${x}" cy="${by}" r="5" fill="#4fc3f7" stroke="#0a0f0f" stroke-width="2"/>`;
-            dots += `<circle cx="${x}" cy="${sy}" r="5" fill="#ff9800" stroke="#0a0f0f" stroke-width="2"/>`;
+        if (tradeTime >= firstTime && tradeTime <= forecastTime) {
+            const x = timeToX(tradeTime);
+            const by = valToY(t.buyPrice / lotSize);
+            const sy = valToY(t.sellPrice / lotSize);
+            dots += `<line x1="${x}" y1="${by}" x2="${x}" y2="${sy}" stroke="#4fc3f7" stroke-width="2" stroke-dasharray="3,3"/>`;
+            dots += `<circle cx="${x}" cy="${by}" r="4" fill="#4fc3f7" stroke="#0a0f0f" stroke-width="1.5"/>`;
+            dots += `<circle cx="${x}" cy="${sy}" r="4" fill="#ff9800" stroke="#0a0f0f" stroke-width="1.5"/>`;
         }
     });
     
-    let linePts = '';
-    data.forEach((p, i) => {
-        const x = pad + (i / Math.max(data.length - 1, 1)) * (W - pad * 2);
-        const y = H - pad - ((p.buy / lotSize - minVal) / range) * (H - pad * 2);
-        linePts += `${x},${y} `;
-    });
+    // Пунктир прогноза
+    const lastX = timeToX(lastTime);
+    const lastY = valToY(lastBuyVal);
+    const forecastX = timeToX(forecastTime);
+    const forecastY = valToY(forecastVal);
+    const forecastColor = pred.slope < -0.05 ? '#6aaa6a' : pred.slope > 0.05 ? '#c06060' : '#888';
+    
+    let forecastLine = '';
+    forecastLine += `<line x1="${lastX}" y1="${lastY}" x2="${forecastX}" y2="${forecastY}" stroke="${forecastColor}" stroke-width="2" stroke-dasharray="6,4" opacity="0.8"/>`;
+    forecastLine += `<circle cx="${forecastX}" cy="${forecastY}" r="5" fill="none" stroke="${forecastColor}" stroke-width="2" stroke-dasharray="3,3"/>`;
+    
+    // Метка времени
+    const timeLabelStep = totalTimeRange > 72 ? 24 : totalTimeRange > 24 ? 12 : 6;
+    let timeLabels = '';
+    for (let h = 0; h <= totalTimeRange; h += timeLabelStep) {
+        const x = padL + (h / totalTimeRange) * plotW;
+        if (x <= W - padR) {
+            timeLabels += `<text x="${x}" y="${H - 5}" fill="#555" font-size="7" text-anchor="middle">${h}ч</text>`;
+        }
+    }
     
     container.innerHTML = `
         <svg viewBox="0 0 ${W} ${H}" style="width:100%;background:#0a0f0f;border-radius:6px;border:1px solid var(--border);margin-top:8px;">
             ${grid}
+            ${timeLabels}
             <polyline points="${linePts}" fill="none" stroke="#d4a574" stroke-width="1.5" opacity="0.6"/>
+            ${forecastLine}
             ${dots}
         </svg>
-        <div style="display:flex;gap:12px;font-size:0.65em;color:#888;margin-top:4px;">
-            <span>🟠 Покупка</span><span>🟢 Продажа</span><span>🔵 Сделка</span>
+        <div style="display:flex;gap:10px;font-size:0.6em;color:#888;margin-top:4px;flex-wrap:wrap;">
+            <span>🟠 Покупка</span><span>🟢 Продажа</span><span>🔵 Сделка</span><span style="color:${forecastColor}">--- Прогноз</span>
         </div>
+        <div style="font-size:0.6em;color:#666;margin-top:2px;">Шкала времени: 0 = первая запись, каждая метка = ${timeLabelStep}ч</div>
         <div class="status-badge ${pred.class}">${pred.text}</div>
         <div class="stat-row">
             <div class="stat-box"><div class="val">${pred.avgBuy.toFixed(2)}</div><div class="lbl">Средняя/шт</div></div>
@@ -184,7 +231,7 @@ function renderItemGraph() {
         </div>`;
 }
 
-// === СКЛАД (v13: без потенциала, только оценка + общее состояние) ===
+// === СКЛАД (без потенциала, чистая оценка) ===
 function updateStorageSelect() {
     const s = document.getElementById('storageItemSelect');
     if (s) s.innerHTML = items.map(i => `<option value="${i.name}">${i.name}</option>`).join('');
@@ -255,7 +302,7 @@ function renderTrades() {
     document.getElementById('tradeStats').innerHTML = `<div class="stat-row"><div class="stat-box"><div class="val" style="color:${tp>=0?'var(--profit)':'var(--loss)'}">${tp.toFixed(0)}</div><div class="lbl">Прибыль</div></div><div class="stat-box"><div class="val">${trades.length}</div><div class="lbl">Сделок</div></div></div>`;
 }
 
-// === ОБЗОР (статистика всего рынка) ===
+// === ОБЗОР ===
 function renderMarket() {
     const container = document.getElementById('marketContent');
     if (!container) return;
@@ -269,12 +316,12 @@ function renderMarket() {
     let totalAvgBuy = 0, count = 0, trendingUp = 0, trendingDown = 0, stable = 0;
     filtered.forEach(item => {
         const data = prices[item.name] || [];
-        if (data.length >= 3) {
+        if (data.length >= 2) {
             const pred = getPrediction(item.name);
             totalAvgBuy += pred.avgBuy;
             count++;
-            if (pred.slope > 0.1) trendingUp++;
-            else if (pred.slope < -0.1) trendingDown++;
+            if (pred.slope > 0.05) trendingUp++;
+            else if (pred.slope < -0.05) trendingDown++;
             else stable++;
         }
     });
@@ -324,14 +371,4 @@ function renderMarket() {
         const data = prices[item.name] || [];
         if (data.length < 2) return;
         const pred = getPrediction(item.name);
-        html += `<div class="item-card" onclick="switchScreen('items');selectItem('${item.name}');"><div class="name">${item.type==='resource'?'⛏️':'🔧'} ${item.name}</div><div style="display:flex;gap:8px;margin-top:4px;"><span style="font-size:0.8em;">${pred.avgBuy.toFixed(2)} ₽/шт</span><span class="status-badge ${pred.class}" style="font-size:0.65em;">${pred.slope>0.1?'📈':pred.slope<-0.1?'📉':'📊'} ${pred.slope.toFixed(1)}/ч</span></div></div>`;
-    });
-    
-    container.innerHTML = html;
-}
-
-// Инициализация
-document.getElementById('balanceInput').value = balance;
-renderItems();
-updateTradeSelect();
-updateStorageSelect();
+        html += `<div class="item-card" onclick="switchScreen('items');selectItem('${item.name}');"><div class="name">${item.type==='resource'?'⛏️':'🔧'} ${item.name}</div><div style="display:flex;gap:8px;margin-top:4px;"><span style="font-size:0.8em;">${pred.avgBuy.toFixed(2)} ₽/шт</spa
