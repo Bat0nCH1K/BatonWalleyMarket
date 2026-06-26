@@ -15,7 +15,6 @@
             <input type="number" id="balanceInput" value="1000" step="0.01" onchange="updateBalance()">
         </div>
     </div>
-
     <div class="sidebar-overlay" id="sidebarOverlay" onclick="toggleSidebar()"></div>
     <div class="sidebar" id="sidebar">
         <button onclick="switchScreen('items');toggleSidebar()">📦 Рынок</button>
@@ -26,102 +25,43 @@
         <button onclick="switchScreen('market');toggleSidebar()">📊 Обзор</button>
         <button onclick="switchScreen('advisor');toggleSidebar()">🧠 Советник</button>
     </div>
-
     <div class="screen active" id="screen-items">
         <h2>📦 РЫНОК</h2>
-        <div class="row">
-            <input type="text" id="newItemName" placeholder="Название">
-            <select id="newItemType"><option value="resource">Ресурс</option><option value="part">Деталь</option></select>
-            <input type="number" id="newLotSize" placeholder="Лот" value="1" min="1" style="flex:0.5;">
-            <button class="accent" onclick="addItemForm()">➕</button>
-        </div>
+        <div class="row"><input type="text" id="newItemName" placeholder="Название"><select id="newItemType"><option value="resource">Ресурс</option><option value="part">Деталь</option></select><input type="number" id="newLotSize" placeholder="Лот" value="1" min="1" style="flex:0.5;"><button class="accent" onclick="addItemForm()">➕</button></div>
         <div id="itemsList"></div>
     </div>
-
-    <div class="screen" id="screen-item-detail">
-        <button onclick="switchScreen('items')" style="margin-bottom:10px;">← Назад</button>
-        <h2 id="detailTitle"></h2>
-        <div id="detailContent"></div>
-    </div>
-
+    <div class="screen" id="screen-item-detail"><button onclick="switchScreen('items')" style="margin-bottom:10px;">← Назад</button><h2 id="detailTitle"></h2><div id="detailContent"></div></div>
     <div class="screen" id="screen-storage">
         <h2>🏭 СКЛАД</h2>
-        <div class="row">
-            <select id="storageItemSelect"></select>
-            <input type="number" id="storageQty" placeholder="Кол-во" value="1" min="1">
-            <label style="font-size:0.7em;display:flex;align-items:center;gap:4px;"><input type="checkbox" id="storageModded"> С модом</label>
-            <button class="accent" onclick="addToStorageUI()">➕</button>
-        </div>
-        <div id="storageList"></div>
-        <div id="storageTotal"></div>
+        <div class="row"><select id="storageItemSelect"></select><input type="number" id="storageQty" placeholder="Кол-во" value="1" min="1"><label style="font-size:0.7em;display:flex;align-items:center;gap:4px;"><input type="checkbox" id="storageModded"> С модом</label><button class="accent" onclick="addToStorageUI()">➕</button></div>
+        <div id="storageList"></div><div id="storageTotal"></div>
     </div>
-
     <div class="screen" id="screen-trades">
         <h2>💰 СДЕЛКИ</h2>
-        <div class="row">
-            <select id="tradeItemSelect"></select>
-            <input type="number" id="tradeBuyPrice" placeholder="Покупка" step="0.01">
-            <input type="number" id="tradeSellPrice" placeholder="Продажа" step="0.01">
-            <button class="accent" onclick="submitTrade()">OK</button>
-        </div>
-        <table id="tradesTable">
-            <thead><tr><th>Предмет</th><th>Куплен</th><th>Продан</th><th>+/-</th><th>%</th><th>Время</th><th></th></tr></thead>
-            <tbody></tbody>
-        </table>
+        <div class="row"><select id="tradeItemSelect"></select><input type="number" id="tradeBuyPrice" placeholder="Покупка" step="0.01"><input type="number" id="tradeSellPrice" placeholder="Продажа" step="0.01"><button class="accent" onclick="submitTrade()">OK</button></div>
+        <table id="tradesTable"><thead><tr><th>Предмет</th><th>Куплен</th><th>Продан</th><th>+/-</th><th>%</th><th>Время</th><th></th></tr></thead><tbody></tbody></table>
         <div id="tradeStats"></div>
     </div>
-
     <div class="screen" id="screen-events">
         <h2>📅 СОБЫТИЯ</h2>
-        <div class="row">
-            <input type="date" id="eventStart" placeholder="Начало">
-            <input type="date" id="eventEnd" placeholder="Конец">
-            <select id="eventType">
-                <option value="factory">🏭 Фабрика</option><option value="rating_end">⚔️ Рейтинг</option>
-                <option value="battlepass">🎫 БП</option><option value="road">🛣️ Наследие</option>
-                <option value="raven">🐦‍⬛ Ворон</option><option value="workshop">🔧 Цех</option>
-                <option value="bounty">🎯 Охота</option>
-            </select>
-            <button class="accent" onclick="submitEvent()">➕</button>
-        </div>
-        <div class="calendar" id="calendarWidget"></div>
-        <div id="eventsList"></div>
+        <div class="row"><input type="date" id="eventStart" placeholder="Начало"><input type="date" id="eventEnd" placeholder="Конец"><select id="eventType"><option value="factory">🏭 Фабрика</option><option value="rating_end">⚔️ Рейтинг</option><option value="battlepass">🎫 БП</option><option value="road">🛣️ Наследие</option><option value="raven">🐦‍⬛ Ворон</option><option value="workshop">🔧 Цех</option><option value="bounty">🎯 Охота</option></select><button class="accent" onclick="submitEvent()">➕</button></div>
+        <div class="calendar" id="calendarWidget"></div><div id="eventsList"></div>
     </div>
-
     <div class="screen" id="screen-goals">
         <h2>🎯 ЦЕЛИ</h2>
-        <div class="row">
-            <select id="goalType">
-                <option value="save">💰 Накопить</option>
-                <option value="sell">📤 Продать</option>
-                <option value="buy">📥 Купить</option>
-            </select>
-            <input type="number" id="goalAmount" placeholder="Сумма (голды)" step="1" min="1">
-            <select id="goalItem" style="display:none;"><option value="">Предмет</option></select>
-            <button class="accent" onclick="submitGoal()">➕</button>
-        </div>
+        <div class="row"><select id="goalType"><option value="save">💰 Накопить</option><option value="sell">📤 Продать</option><option value="buy">📥 Купить</option></select><input type="number" id="goalAmount" placeholder="Сумма (голды)" step="1" min="1"><select id="goalItem" style="display:none;"><option value="">Предмет</option></select><button class="accent" onclick="submitGoal()">➕</button></div>
         <div id="goalsList"></div>
     </div>
-
     <div class="screen" id="screen-market">
         <h2>📊 ОБЗОР РЫНКА</h2>
-        <div class="market-tabs">
-            <button class="market-tab active" onclick="switchMarketTab('overview')">📈 Общий</button>
-            <button class="market-tab" onclick="switchMarketTab('resources')">⛏️ Ресурсы</button>
-            <button class="market-tab" onclick="switchMarketTab('parts')">🔧 Детали</button>
-        </div>
+        <div class="market-tabs"><button class="market-tab active" onclick="switchMarketTab('overview')">📈 Общий</button><button class="market-tab" onclick="switchMarketTab('resources')">⛏️ Ресурсы</button><button class="market-tab" onclick="switchMarketTab('parts')">🔧 Детали</button></div>
         <div id="marketContent"></div>
     </div>
-
     <div class="screen" id="screen-advisor">
         <h2>🧠 СОВЕТНИК OWL</h2>
         <div id="advisorChat" style="max-height:300px;overflow-y:auto;margin-bottom:8px;"></div>
-        <div class="row">
-            <input type="text" id="advisorInput" placeholder="Спроси совет...">
-            <button class="accent" onclick="askAdvisor()">▶</button>
-        </div>
+        <div class="row"><input type="text" id="advisorInput" placeholder="Спроси совет..."><button class="accent" onclick="askAdvisor()">▶</button></div>
     </div>
-
     <script src="core.js"></script>
     <script src="market.js"></script>
     <script src="events.js"></script>
