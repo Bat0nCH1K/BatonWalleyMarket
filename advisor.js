@@ -1,4 +1,4 @@
-// Wasteland Market Terminal — advisor.js v2 (сохранение истории)
+// Wasteland Market Terminal — advisor.js v3 (улучшенный контекст: план достижения целей)
 let advisorHistory = JSON.parse(localStorage.getItem('wl_advisor_history') || '[]');
 
 function getKey() {
@@ -22,9 +22,11 @@ function getMarketSummary() {
         s += '\nСКЛАД:\n';
         let tv = 0;
         storageItems.forEach(st => {
-            const data = prices[st.item] || [], price = data.length>0?data[data.length-1].sell:0;
-            const item = items.find(i=>i.name===st.item), ls = item?item.lotSize:1;
-            const val = price * st.qty; tv += val;
+            const data = prices[st.item] || [];
+            const item = items.find(i=>i.name===st.item);
+            const ls = item ? item.lotSize : 1;
+            const pricePerUnit = data.length>0 ? data[data.length-1].sell / ls : 0;
+            const val = pricePerUnit * st.qty; tv += val;
             const inv = (st.buyPrice||0) * st.qty;
             const prof = val - inv;
             s += `${st.item} ×${st.qty}: вложено ${inv.toFixed(0)}, сейчас ${val.toFixed(0)} (${prof>=0?'+':''}${prof.toFixed(0)})${st.modded?' [МОД]':''}\n`;
@@ -35,9 +37,57 @@ function getMarketSummary() {
     const ae = getActiveEvent();
     if (ae) s += `\nТекущее событие: ${ae.type} (до ${ae.end})\n`;
     
+    // ЦЕЛИ С ПЛАНОМ
     if (goals.length > 0) {
-        s += '\nЦЕЛИ:\n';
-        goals.forEach(g => s += `${g.text} (${balance.toFixed(0)}/${g.target.toFixed(0)})\n`);
+        s += '\nЦЕЛИ И ПЛАН:\n';
+        goals.forEach(g => {
+            if (g.text.startsWith('💰')) {
+                // Накопить
+                const need = g.target - balance;
+                s += `${g.text} (есть ${balance.toFixed(0)}, осталось ${need>0?need.toFixed(0):0})\n`;
+                if (need > 0 && storageItems.length > 0) {
+                    // Предложить что продать
+                    const candidates = storageItems.filter(st => !st.modded && (prices[st.item]||[]).length > 0);
+                    if (candidates.length > 0) {
+                        s += `  💡 Чтобы накопить: продай что-то со склада (без модов). `;
+                        candidates.forEach(st => {
+                            const data = prices[st.item] || [];
+                            const item = items.find(i=>i.name===st.item);
+                            const ls = item ? item.lotSize : 1;
+                            const price = data.length>0 ? data[data.length-1].sell/ls : 0;
+                            s += `${st.item} (${(price*st.qty).toFixed(0)} голды за ${st.qty} шт), `;
+                        });
+                        s += '\n';
+                    }
+                }
+            } else if (g.text.startsWith('📤')) {
+                // Продать предмет
+                const itemName = g.item || '';
+                const storage = storageItems.filter(s => s.item === itemName && !s.modded);
+                const totalQty = storage.reduce((sum, s) => sum + s.qty, 0);
+                const data = prices[itemName] || [];
+                const item = items.find(i=>i.name===itemName);
+                const ls = item ? item.lotSize : 1;
+                const pricePerUnit = data.length>0 ? data[data.length-1].sell/ls : 0;
+                const value = totalQty * pricePerUnit;
+                s += `${g.text}: на складе ${totalQty} шт на ${value.toFixed(0)} голды`;
+                if (value >= g.target) s += ' ✅ ГОТОВО К ПРОДАЖЕ';
+                else s += ` (не хватает ${(g.target-value).toFixed(0)})`;
+                s += '\n';
+            } else if (g.text.startsWith('📥')) {
+                // Купить предмет
+                const itemName = g.item || '';
+                const data = prices[itemName] || [];
+                const item = items.find(i=>i.name===itemName);
+                const ls = item ? item.lotSize : 1;
+                const pricePerUnit = data.length>0 ? data[data.length-1].buy/ls : 0;
+                const maxQty = pricePerUnit > 0 ? Math.floor(balance / pricePerUnit) : 0;
+                s += `${g.text}: цена ${pricePerUnit.toFixed(2)}/шт, можешь купить ${maxQty} шт на ${balance.toFixed(0)} голды`;
+                if (balance >= g.target) s += ' ✅ ХВАТАЕТ';
+                else s += ` (не хватает ${(g.target-balance).toFixed(0)})`;
+                s += '\n';
+            }
+        });
     }
     
     if (trades.length > 0) {
@@ -63,7 +113,7 @@ async function askAdvisor() {
     input.value = '';
     
     const summary = getMarketSummary();
-    const systemPrompt = `Ты — OWL, торговый советник в Crossout Mobile. Стиль: деловой, краткий (2-5 предложений). Видишь рынок, склад, цели, события. Даёшь конкретные советы с цифрами. Напоминаешь что моды мешают продаже. Для целей предлагаешь план. Не пишешь "как ИИ".`;
+    const systemPrompt = `Ты — OWL, торговый советник в Crossout Mobile. Стиль: деловой, краткий (2-5 предложений). Видишь рынок, склад, цели, события. Для каждой цели предлагаешь КОНКРЕТНЫЙ ПЛАН действий. Напоминаешь что моды мешают продаже. Не пишешь "как ИИ".`;
     
     advisorHistory = advisorHistory.slice(-10);
     advisorHistory.push({ role: 'user', content: msg });
