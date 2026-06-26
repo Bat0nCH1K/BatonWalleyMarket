@@ -1,4 +1,4 @@
-// Wasteland Market Terminal — events.js v3 (цели с типами + drag & drop)
+// Wasteland Market Terminal — events.js v4 (фикс целей: учёт типа цели + drag & drop)
 let calendarYear, calendarMonth;
 
 function submitEvent() {
@@ -61,7 +61,7 @@ function changeMonth(delta) {
     renderCalendar();
 }
 
-// === ЦЕЛИ ===
+// === ЦЕЛИ (ФИКС: разная логика для Накопить/Купить/Продать) ===
 document.addEventListener('DOMContentLoaded', function() {
     const typeEl = document.getElementById('goalType');
     if (typeEl) {
@@ -90,10 +90,41 @@ function submitGoal() {
     else if (type === 'sell') text = '📤 Продать ' + item + ' за ' + amount;
     else text = '📥 Купить ' + item + ' за ' + amount;
     
-    addGoal(text, amount, 0);
+    addGoal(text, amount, 0, type === 'save' ? '' : item);
     document.getElementById('goalAmount').value = '';
     document.getElementById('goalItem').value = '';
     renderGoals();
+}
+
+// Функция для получения текущего прогресса цели
+function getGoalProgress(goal) {
+    // Определяем тип цели по тексту
+    if (goal.text.startsWith('💰')) {
+        // Накопить: прогресс = баланс голды
+        return { current: balance, target: goal.target, done: balance >= goal.target };
+    } else if (goal.text.startsWith('📤')) {
+        // Продать: смотрим, есть ли предмет на складе и сколько за него можно выручить
+        const itemName = goal.item || '';
+        const storage = storageItems.filter(s => s.item === itemName);
+        const totalQty = storage.reduce((sum, s) => sum + s.qty, 0);
+        const data = prices[itemName] || [];
+        const itemObj = items.find(i => i.name === itemName);
+        const ls = itemObj ? itemObj.lotSize : 1;
+        const pricePerUnit = data.length > 0 ? data[data.length - 1].sell / ls : 0;
+        const value = totalQty * pricePerUnit;
+        return { current: value, target: goal.target, done: value >= goal.target, itemName, totalQty, pricePerUnit };
+    } else if (goal.text.startsWith('📥')) {
+        // Купить: проверяем, хватает ли баланса
+        const itemName = goal.item || '';
+        const data = prices[itemName] || [];
+        const itemObj = items.find(i => i.name === itemName);
+        const ls = itemObj ? itemObj.lotSize : 1;
+        const pricePerUnit = data.length > 0 ? data[data.length - 1].buy / ls : 0;
+        // Прогресс покупки: сколько % нужной суммы уже есть
+        const pct = goal.target > 0 ? Math.min(100, (balance / goal.target) * 100) : 0;
+        return { current: balance, target: goal.target, done: balance >= goal.target, itemName, pricePerUnit, pct };
+    }
+    return { current: balance, target: goal.target, done: balance >= goal.target };
 }
 
 function renderGoals() {
@@ -102,13 +133,23 @@ function renderGoals() {
     if (goals.length === 0) { list.innerHTML = '<p style="color:#888;">Нет целей</p>'; return; }
     
     list.innerHTML = goals.map((g, i) => {
-        const pct = Math.min(100, g.target > 0 ? (balance / g.target) * 100 : 0);
-        const done = balance >= g.target;
+        const prog = getGoalProgress(g);
+        const pct = Math.min(100, prog.target > 0 ? (prog.current / prog.target) * 100 : 0);
+        let extra = '';
+        
+        if (g.text.startsWith('📤') && prog.itemName) {
+            extra = `<div style="font-size:0.7em;color:#888;">На складе: ${prog.totalQty} шт × ${(prog.pricePerUnit||0).toFixed(2)} = ${prog.current.toFixed(0)} голды</div>`;
+        } else if (g.text.startsWith('📥') && prog.itemName) {
+            extra = `<div style="font-size:0.7em;color:#888;">Цена за шт: ${(prog.pricePerUnit||0).toFixed(2)} | Баланс: ${prog.current.toFixed(0)} голды</div>`;
+        } else {
+            extra = `<div style="font-size:0.7em;color:#888;">Баланс: ${prog.current.toFixed(0)} / ${prog.target.toFixed(0)}</div>`;
+        }
+        
         return `<div class="item-card" style="cursor:grab;" draggable="true" ondragstart="dragGoal(event,${i})" ondragover="event.preventDefault()" ondrop="dropGoal(event,${i})">
-            <div class="name">${done ? '✅' : '🎯'} ${g.text}</div>
-            <div style="font-size:0.8em;">Баланс: ${balance.toFixed(0)} / ${g.target.toFixed(0)}</div>
+            <div class="name">${prog.done ? '✅' : '🎯'} ${g.text}</div>
+            ${extra}
             <div style="height:6px;background:#1a2a2a;border-radius:3px;margin-top:4px;">
-                <div style="height:100%;width:${pct}%;background:${done?'var(--profit)':'var(--accent)'};border-radius:3px;"></div>
+                <div style="height:100%;width:${pct}%;background:${prog.done?'var(--profit)':'var(--accent)'};border-radius:3px;"></div>
             </div>
             <button class="delete-btn" onclick="goals.splice(${i},1);saveAll();renderGoals();">✕</button>
         </div>`;
