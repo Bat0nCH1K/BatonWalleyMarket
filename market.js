@@ -1,4 +1,4 @@
-// Wasteland Market Terminal — market.js v10 (сделки с датой, график с маркерами сделок)
+// Wasteland Market Terminal — market.js v11 (фикс склада + фильтры + обзор как статистика)
 let currentScreen = 'items';
 let marketTab = 'overview';
 
@@ -28,7 +28,7 @@ function switchMarketTab(tab) {
     renderMarket();
 }
 
-// === ПРЕДМЕТЫ ===
+// === ПРЕДМЕТЫ (с фильтром) ===
 function addItemForm() {
     const name = document.getElementById('newItemName').value.trim();
     const type = document.getElementById('newItemType').value;
@@ -96,12 +96,20 @@ function renderItems() {
     const list = document.getElementById('itemsList');
     if (!list) return;
     if (items.length === 0) { list.innerHTML = '<p style="color:#888;">Нет предметов</p>'; return; }
-    list.innerHTML = items.map(item => {
+    
+    const searchEl = document.getElementById('itemSearch');
+    const search = searchEl ? searchEl.value.toLowerCase() : '';
+    let filtered = items;
+    if (search) filtered = items.filter(i => i.name.toLowerCase().includes(search));
+    
+    let html = '<div class="row"><input type="text" id="itemSearch" placeholder="🔍 Фильтр..." oninput="renderItems()"></div>';
+    html += filtered.map(item => {
         const data = prices[item.name] || [];
         const last = data[data.length - 1];
         const lastBuy = last ? (last.buy / item.lotSize).toFixed(2) : '—';
         return `<div class="item-card" onclick="selectItem('${item.name}')"><div class="name">${item.type==='resource'?'⛏️':'🔧'} ${item.name} (×${item.lotSize})</div><div class="stats">${data.length} зап. | ${lastBuy} ₽/шт</div></div>`;
     }).join('');
+    list.innerHTML = html || '<p style="color:#888;">Ничего не найдено</p>';
     updateTradeSelect(); updateStorageSelect();
 }
 
@@ -122,7 +130,6 @@ function renderItemGraph() {
     const maxVal = Math.max(...allVals), minVal = Math.min(...allVals), range = maxVal - minVal || 1;
     const W = 300, H = 130, pad = 30;
     
-    // Сетка
     let grid = '';
     for (let i = 0; i <= 4; i++) {
         const y = pad + (H - pad * 2) * i / 4;
@@ -130,7 +137,6 @@ function renderItemGraph() {
         grid += `<text x="${pad - 4}" y="${y + 3}" fill="#555" font-size="8" text-anchor="end">${(maxVal - range * i / 4).toFixed(1)}</text>`;
     }
     
-    // Точки цен
     let dots = '';
     data.forEach((p, i) => {
         const x = pad + (i / Math.max(data.length - 1, 1)) * (W - pad * 2);
@@ -140,7 +146,6 @@ function renderItemGraph() {
         dots += `<circle cx="${x}" cy="${sy}" r="3" fill="#6aaa6a" opacity="0.7"/>`;
     });
     
-    // Сделки на графике
     itemTrades.forEach(t => {
         const tradeTime = new Date(t.buyDate).getTime();
         const firstTime = new Date(data[0].time).getTime();
@@ -150,14 +155,12 @@ function renderItemGraph() {
         if (x >= pad && x <= W - pad) {
             const by = H - pad - ((t.buyPrice / lotSize - minVal) / range) * (H - pad * 2);
             const sy = H - pad - ((t.sellPrice / lotSize - minVal) / range) * (H - pad * 2);
-            // Вертикальная линия сделки
             dots += `<line x1="${x}" y1="${by}" x2="${sy}" stroke="#4fc3f7" stroke-width="2" stroke-dasharray="3,3"/>`;
             dots += `<circle cx="${x}" cy="${by}" r="5" fill="#4fc3f7" stroke="#0a0f0f" stroke-width="2"/>`;
             dots += `<circle cx="${x}" cy="${sy}" r="5" fill="#ff9800" stroke="#0a0f0f" stroke-width="2"/>`;
         }
     });
     
-    // Линия тренда
     let linePts = '';
     data.forEach((p, i) => {
         const x = pad + (i / Math.max(data.length - 1, 1)) * (W - pad * 2);
@@ -212,7 +215,9 @@ function renderStorage() {
     list.innerHTML = storageItems.map((s, i) => {
         const data = prices[s.item] || [], price = data.length > 0 ? data[data.length - 1].sell : 0;
         const item = items.find(it => it.name === s.item), ls = item ? item.lotSize : 1;
-        const val = price * s.qty, inv = (s.buyPrice || 0) * s.qty, prof = val - inv;
+        const val = price * s.qty;
+        const inv = (s.buyPrice || 0) * s.qty;
+        const prof = val - inv;
         tv += val; ti += inv;
         return `<div class="item-card"><div class="name">${s.item} ×${s.qty} ${s.modded?'🔧':''}</div><div class="stats">Вложено: ${inv.toFixed(0)} | Сейчас: ${val.toFixed(0)} | <span style="color:${prof>=0?'var(--profit)':'var(--loss)'}">${prof>=0?'+':''}${prof.toFixed(0)}</span></div><button class="delete-btn" onclick="storageItems.splice(${i},1);saveAll();renderStorage();">✕</button></div>`;
     }).join('');
@@ -230,14 +235,8 @@ function submitTrade() {
     const now = new Date(); now.setHours(now.getHours() + 3);
     const timeStr = now.toISOString();
     addTrade(item, buy, sell);
-    // Обновляем даты в сделке на текущее время
-    if (trades.length > 0) {
-        trades[trades.length-1].buyDate = timeStr;
-        trades[trades.length-1].sellDate = timeStr;
-        saveAll();
-    }
-    document.getElementById('tradeBuyPrice').value = '';
-    document.getElementById('tradeSellPrice').value = '';
+    if (trades.length > 0) { trades[trades.length-1].buyDate = timeStr; trades[trades.length-1].sellDate = timeStr; saveAll(); }
+    document.getElementById('tradeBuyPrice').value = ''; document.getElementById('tradeSellPrice').value = '';
     renderTrades(); renderStorage();
 }
 function renderTrades() {
@@ -248,30 +247,82 @@ function renderTrades() {
     document.getElementById('tradeStats').innerHTML = `<div class="stat-row"><div class="stat-box"><div class="val" style="color:${tp>=0?'var(--profit)':'var(--loss)'}">${tp.toFixed(0)}</div><div class="lbl">Прибыль</div></div><div class="stat-box"><div class="val">${trades.length}</div><div class="lbl">Сделок</div></div></div>`;
 }
 
-// === ОБЗОР ===
+// === ОБЗОР (статистика всего рынка) ===
 function renderMarket() {
     const container = document.getElementById('marketContent');
     if (!container) return;
+    
     let filtered = items;
     if (marketTab === 'resources') filtered = items.filter(i => i.type === 'resource');
     if (marketTab === 'parts') filtered = items.filter(i => i.type === 'part');
     
-    let html = '<div class="row"><input type="text" id="marketSearch" placeholder="🔍 Фильтр..." oninput="renderMarket()"></div>';
-    const searchEl = document.getElementById('marketSearch');
-    const search = searchEl ? searchEl.value.toLowerCase() : '';
-    if (search) filtered = filtered.filter(i => i.name.toLowerCase().includes(search));
+    if (filtered.length === 0) { container.innerHTML = '<p style="color:#888;">Нет предметов</p>'; return; }
     
-    if (filtered.length === 0) { container.innerHTML = html + '<p style="color:#888;">Нет предметов</p>'; return; }
-    
-    filtered.sort((a, b) => { const pa = getPrediction(a.name), pb = getPrediction(b.name); return pb.slope - pa.slope; });
-    
+    // Общая статистика
+    let totalAvgBuy = 0, count = 0, trendingUp = 0, trendingDown = 0, stable = 0;
     filtered.forEach(item => {
+        const data = prices[item.name] || [];
+        if (data.length >= 3) {
+            const pred = getPrediction(item.name);
+            totalAvgBuy += pred.avgBuy;
+            count++;
+            if (pred.slope > 0.1) trendingUp++;
+            else if (pred.slope < -0.1) trendingDown++;
+            else stable++;
+        }
+    });
+    const avgMarket = count > 0 ? totalAvgBuy / count : 0;
+    
+    // График среднего рынка
+    let allBuys = [];
+    filtered.forEach(item => {
+        (prices[item.name] || []).forEach(p => allBuys.push(p.buy / (items.find(i=>i.name===item.name)?.lotSize||1)));
+    });
+    allBuys.sort((a,b) => a-b);
+    const maxAll = allBuys.length > 0 ? allBuys[allBuys.length-1] : 0;
+    const minAll = allBuys.length > 0 ? allBuys[0] : 0;
+    const rangeAll = maxAll - minAll || 1;
+    const W = 300, H = 80, pad = 10;
+    let linePts = '';
+    if (allBuys.length > 1) {
+        allBuys.forEach((b, i) => {
+            const x = pad + (i / (allBuys.length - 1)) * (W - pad * 2);
+            const y = H - pad - ((b - minAll) / rangeAll) * (H - pad * 2);
+            linePts += `${x},${y} `;
+        });
+    }
+    
+    let html = `
+        <div class="stat-row">
+            <div class="stat-box"><div class="val">${avgMarket.toFixed(2)}</div><div class="lbl">Средняя цена/шт</div></div>
+            <div class="stat-box"><div class="val">${count}</div><div class="lbl">Предметов с данными</div></div>
+            <div class="stat-box"><div class="val" style="color:var(--profit)">${trendingUp}</div><div class="lbl">📈 Растут</div></div>
+            <div class="stat-box"><div class="val" style="color:var(--loss)">${trendingDown}</div><div class="lbl">📉 Падают</div></div>
+        </div>`;
+    
+    if (linePts) {
+        html += `<svg viewBox="0 0 ${W} ${H}" style="width:100%;background:#0a0f0f;border-radius:6px;border:1px solid var(--border);margin-top:8px;">
+            <polyline points="${linePts}" fill="none" stroke="#d4a574" stroke-width="2"/>
+        </svg>
+        <div style="font-size:0.65em;color:#888;text-align:center;">Общий тренд рынка (все цены)</div>`;
+    }
+    
+    // Детализация по предметам
+    html += '<h3 style="margin-top:12px;">📋 Детализация</h3>';
+    html += '<div class="row"><input type="text" id="marketSearch" placeholder="🔍 Фильтр..." oninput="renderMarket()"></div>';
+    const search = document.getElementById('marketSearch')?.value?.toLowerCase() || '';
+    let detailFiltered = filtered;
+    if (search) detailFiltered = filtered.filter(i => i.name.toLowerCase().includes(search));
+    detailFiltered.sort((a,b) => { const pa = getPrediction(a.name), pb = getPrediction(b.name); return pb.slope - pa.slope; });
+    
+    detailFiltered.forEach(item => {
         const data = prices[item.name] || [];
         if (data.length < 2) return;
         const pred = getPrediction(item.name);
         html += `<div class="item-card" onclick="switchScreen('items');selectItem('${item.name}');"><div class="name">${item.type==='resource'?'⛏️':'🔧'} ${item.name}</div><div style="display:flex;gap:8px;margin-top:4px;"><span style="font-size:0.8em;">${pred.avgBuy.toFixed(2)} ₽/шт</span><span class="status-badge ${pred.class}" style="font-size:0.65em;">${pred.slope>0.1?'📈':pred.slope<-0.1?'📉':'📊'} ${pred.slope.toFixed(1)}/ч</span></div></div>`;
     });
-    container.innerHTML = html || '<p style="color:#888;">Недостаточно данных</p>';
+    
+    container.innerHTML = html;
 }
 
 // Инициализация
