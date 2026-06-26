@@ -1,4 +1,4 @@
-// Wasteland Market Terminal — core.js (фикс склада + авто-склад из сделок)
+// Wasteland Market Terminal — core.js v5.2 (фикс оценки склада)
 const STORAGE_ITEMS = 'wl_items_v4';
 const STORAGE_PRICES = 'wl_prices_v4';
 const STORAGE_TRADES = 'wl_trades_v4';
@@ -72,7 +72,6 @@ function addTrade(item, buyPrice, sellPrice) {
     balance += profit;
     document.getElementById('balanceInput').value = balance.toFixed(2);
     
-    // Авто-склад: при покупке добавляем предмет
     const itemObj = items.find(i => i.name === item);
     const lotSize = itemObj ? itemObj.lotSize : 1;
     const existing = storageItems.find(s => s.item === item && !s.modded);
@@ -88,7 +87,6 @@ function addTrade(item, buyPrice, sellPrice) {
 
 function addToStorage(item, qty, buyPrice, modded) {
     if (!item || isNaN(qty)) return;
-    // Разрешаем buyPrice = 0 (бесплатно получил)
     if (buyPrice === undefined || buyPrice === null) buyPrice = 0;
     storageItems.push({ item, qty, buyPrice: Number(buyPrice) || 0, modded, date: new Date().toISOString() });
     saveAll();
@@ -170,4 +168,4 @@ function getGlobalAccuracy() {
         correct += withActual.filter(p => (p.predicted > 0.5 && p.actual === 1) || (p.predicted <= 0.5 && p.actual === 0)).length;
     });
     return total > 0 ? Math.round((correct / total) * 100) : 0;
-                                                                              }
+}
