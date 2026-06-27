@@ -1,4 +1,4 @@
-// Wasteland Market Terminal — market.js v13 (без потенциала, общее состояние)
+// Wasteland Market Terminal — market.js v16 (новые сделки: buy/sell)
 let currentScreen = 'items';
 let marketTab = 'overview';
 
@@ -106,7 +106,8 @@ function renderItems() {
         const data = prices[item.name] || [];
         const last = data[data.length - 1];
         const lastBuy = last ? (last.buy / item.lotSize).toFixed(2) : '—';
-        return `<div class="item-card" onclick="selectItem('${item.name}')"><div class="name">${item.type==='resource'?'⛏️':'🔧'} ${item.name} (×${item.lotSize})</div><div class="stats">${data.length} зап. | ${lastBuy} ₽/шт</div></div>`;
+        const profit = getItemProfit(item.name);
+        return `<div class="item-card" onclick="selectItem('${item.name}')"><div class="name">${item.type==='resource'?'⛏️':'🔧'} ${item.name} (×${item.lotSize})</div><div class="stats">${data.length} зап. | ${lastBuy} ₽/шт | П/У: <span style="color:${profit>=0?'var(--profit)':'var(--loss)'}">${profit>=0?'+':''}${profit.toFixed(0)}</span></div></div>`;
     }).join('');
     list.innerHTML = html || '<p style="color:#888;">Ничего не найдено</p>';
     updateTradeSelect(); updateStorageSelect();
@@ -124,7 +125,7 @@ function renderItemGraph() {
     const buys = data.map(p => p.buy / lotSize);
     const allVals = [...buys];
     const itemTrades = trades.filter(t => t.item === selectedItem);
-    itemTrades.forEach(t => { allVals.push(t.buyPrice / lotSize); allVals.push(t.sellPrice / lotSize); });
+    itemTrades.forEach(t => { allVals.push(t.pricePerUnit); });
     
     const maxVal = Math.max(...allVals), minVal = Math.min(...allVals), range = maxVal - minVal || 1;
     const W = 300, H = 130, pad = 30;
@@ -145,18 +146,18 @@ function renderItemGraph() {
         dots += `<circle cx="${x}" cy="${sy}" r="3" fill="#6aaa6a" opacity="0.7"/>`;
     });
     
+    // Маркеры сделок
     itemTrades.forEach(t => {
-        const tradeTime = new Date(t.buyDate).getTime();
+        const tradeTime = new Date(t.date).getTime();
         const firstTime = new Date(data[0].time).getTime();
         const lastTime = new Date(data[data.length-1].time).getTime();
         const timeRange = lastTime - firstTime || 1;
         const x = pad + ((tradeTime - firstTime) / timeRange) * (W - pad * 2);
         if (x >= pad && x <= W - pad) {
-            const by = H - pad - ((t.buyPrice / lotSize - minVal) / range) * (H - pad * 2);
-            const sy = H - pad - ((t.sellPrice / lotSize - minVal) / range) * (H - pad * 2);
-            dots += `<line x1="${x}" y1="${by}" x2="${sy}" stroke="#4fc3f7" stroke-width="2" stroke-dasharray="3,3"/>`;
-            dots += `<circle cx="${x}" cy="${by}" r="5" fill="#4fc3f7" stroke="#0a0f0f" stroke-width="2"/>`;
-            dots += `<circle cx="${x}" cy="${sy}" r="5" fill="#ff9800" stroke="#0a0f0f" stroke-width="2"/>`;
+            const y = H - pad - ((t.pricePerUnit - minVal) / range) * (H - pad * 2);
+            const color = t.type === 'buy' ? '#4fc3f7' : '#ff9800';
+            const symbol = t.type === 'buy' ? '▼' : '▲';
+            dots += `<text x="${x}" y="${y - 5}" fill="${color}" font-size="12" text-anchor="middle">${symbol}</text>`;
         }
     });
     
@@ -167,6 +168,8 @@ function renderItemGraph() {
         linePts += `${x},${y} `;
     });
     
+    const itemProfit = getItemProfit(selectedItem);
+    
     container.innerHTML = `
         <svg viewBox="0 0 ${W} ${H}" style="width:100%;background:#0a0f0f;border-radius:6px;border:1px solid var(--border);margin-top:8px;">
             ${grid}
@@ -174,16 +177,17 @@ function renderItemGraph() {
             ${dots}
         </svg>
         <div style="display:flex;gap:12px;font-size:0.65em;color:#888;margin-top:4px;">
-            <span>🟠 Покупка</span><span>🟢 Продажа</span><span>🔵 Сделка</span>
+            <span>🟠 Покупка</span><span>🟢 Продажа</span><span>🔵 Купил</span><span>🟠 Продал</span>
         </div>
         <div class="status-badge ${pred.class}">${pred.text}</div>
         <div class="stat-row">
             <div class="stat-box"><div class="val">${pred.avgBuy.toFixed(2)}</div><div class="lbl">Средняя/шт</div></div>
             <div class="stat-box"><div class="val">${(pred.confidence*100).toFixed(0)}%</div><div class="lbl">Уверенность</div></div>
+            <div class="stat-box"><div class="val" style="color:${itemProfit>=0?'var(--profit)':'var(--loss)'}">${itemProfit>=0?'+':''}${itemProfit.toFixed(0)}</div><div class="lbl">Прибыль</div></div>
         </div>`;
 }
 
-// === СКЛАД (без потенциала, чистая оценка) ===
+// === СКЛАД ===
 function updateStorageSelect() {
     const s = document.getElementById('storageItemSelect');
     if (s) s.innerHTML = items.map(i => `<option value="${i.name}">${i.name}</option>`).join('');
@@ -232,26 +236,62 @@ function renderStorage() {
         </div>`;
 }
 
-// === СДЕЛКИ ===
-function updateTradeSelect() { const s = document.getElementById('tradeItemSelect'); if (s) s.innerHTML = items.map(i => `<option value="${i.name}">${i.name}</option>`).join(''); }
+// === СДЕЛКИ (новый интерфейс) ===
+function updateTradeSelect() { 
+    const s = document.getElementById('tradeItemSelect'); 
+    if (s) s.innerHTML = items.map(i => `<option value="${i.name}">${i.name}</option>`).join(''); 
+}
+
 function submitTrade() {
     const item = document.getElementById('tradeItemSelect').value;
-    const buy = parseFloat(document.getElementById('tradeBuyPrice').value);
-    const sell = parseFloat(document.getElementById('tradeSellPrice').value);
-    if (!item || isNaN(buy) || isNaN(sell)) { alert('Заполни'); return; }
-    const now = new Date(); now.setHours(now.getHours() + 3);
-    const timeStr = now.toISOString();
-    addTrade(item, buy, sell);
-    if (trades.length > 0) { trades[trades.length-1].buyDate = timeStr; trades[trades.length-1].sellDate = timeStr; saveAll(); }
-    document.getElementById('tradeBuyPrice').value = ''; document.getElementById('tradeSellPrice').value = '';
-    renderTrades(); renderStorage();
+    const type = document.getElementById('tradeType').value;
+    const qty = parseInt(document.getElementById('tradeQty').value);
+    const pricePerUnit = parseFloat(document.getElementById('tradePrice').value);
+    
+    if (!item || isNaN(qty) || isNaN(pricePerUnit)) { alert('Заполни все поля'); return; }
+    if (qty <= 0) { alert('Количество должно быть > 0'); return; }
+    
+    addTrade(item, type, qty, pricePerUnit);
+    
+    document.getElementById('tradeQty').value = '';
+    document.getElementById('tradePrice').value = '';
+    renderTrades(); renderStorage(); renderItems();
 }
+
 function renderTrades() {
     const tbody = document.querySelector('#tradesTable tbody');
     if (!tbody) return;
-    tbody.innerHTML = trades.map((t, i) => `<tr><td>${t.item}</td><td>${t.buyPrice.toFixed(0)}</td><td>${t.sellPrice.toFixed(0)}</td><td style="color:${t.profit>=0?'var(--profit)':'var(--loss)'}">${t.profit.toFixed(0)}</td><td style="color:${t.profit>=0?'var(--profit)':'var(--loss)'}">${t.profitPct.toFixed(1)}%</td><td>${new Date(t.buyDate).toLocaleString('ru-RU',{month:'short',day:'numeric',hour:'2-digit',minute:'2-digit'})}</td><td><button class="delete-btn" onclick="trades.splice(${i},1);saveAll();renderTrades();">✕</button></td></tr>`).join('');
-    const tp = trades.reduce((a,b)=>a+b.profit,0);
-    document.getElementById('tradeStats').innerHTML = `<div class="stat-row"><div class="stat-box"><div class="val" style="color:${tp>=0?'var(--profit)':'var(--loss)'}">${tp.toFixed(0)}</div><div class="lbl">Прибыль</div></div><div class="stat-box"><div class="val">${trades.length}</div><div class="lbl">Сделок</div></div></div>`;
+    
+    // Обновляем заголовки таблицы
+    const thead = document.querySelector('#tradesTable thead tr');
+    if (thead) {
+        thead.innerHTML = '<th>Предмет</th><th>Тип</th><th>Кол-во</th><th>Цена/шт</th><th>Сумма</th><th>Дата</th><th></th>';
+    }
+    
+    const sorted = [...trades].sort((a,b) => new Date(b.date) - new Date(a.date));
+    
+    tbody.innerHTML = sorted.map((t, i) => {
+        const typeLabel = t.type === 'buy' ? '📥 Купил' : '📤 Продал';
+        const color = t.type === 'buy' ? 'var(--loss)' : 'var(--profit)';
+        const dateStr = new Date(t.date).toLocaleString('ru-RU', {month:'short', day:'numeric', hour:'2-digit', minute:'2-digit'});
+        const realIndex = trades.indexOf(t);
+        return `<tr>
+            <td>${t.item}</td>
+            <td style="color:${color}">${typeLabel}</td>
+            <td>${t.qty}</td>
+            <td>${t.pricePerUnit.toFixed(2)}</td>
+            <td>${t.total.toFixed(0)}</td>
+            <td>${dateStr}</td>
+            <td><button class="delete-btn" onclick="trades.splice(${realIndex},1);saveAll();renderTrades();renderStorage();">✕</button></td>
+        </tr>`;
+    }).join('');
+    
+    const totalProfit = getTotalProfit();
+    document.getElementById('tradeStats').innerHTML = `
+        <div class="stat-row">
+            <div class="stat-box"><div class="val" style="color:${totalProfit>=0?'var(--profit)':'var(--loss)'}">${totalProfit>=0?'+':''}${totalProfit.toFixed(0)}</div><div class="lbl">Общая прибыль</div></div>
+            <div class="stat-box"><div class="val">${trades.length}</div><div class="lbl">Сделок</div></div>
+        </div>`;
 }
 
 // === ОБЗОР ===
