@@ -37,10 +37,21 @@
         <div id="storageList"></div><div id="storageTotal"></div>
     </div>
     <div class="screen" id="screen-trades">
-        <h2>💰 СДЕЛКИ</h2>
-        <div class="row"><select id="tradeItemSelect"></select><input type="number" id="tradeBuyPrice" placeholder="Покупка" step="0.01"><input type="number" id="tradeSellPrice" placeholder="Продажа" step="0.01"><button class="accent" onclick="submitTrade()">OK</button></div>
-        <table id="tradesTable"><thead><tr><th>Предмет</th><th>Куплен</th><th>Продан</th><th>+/-</th><th>%</th><th>Время</th><th></th></tr></thead><tbody></tbody></table>
-        <div id="tradeStats"></div>
+    <h2>💰 СДЕЛКИ</h2>
+    <div class="row">
+        <select id="tradeItemSelect"></select>
+        <select id="tradeType">
+            <option value="buy">📥 Купил</option>
+            <option value="sell">📤 Продал</option>
+        </select>
+    </div>
+    <div class="row">
+        <input type="number" id="tradeQty" placeholder="Кол-во (шт)" step="1" min="1">
+        <input type="number" id="tradePrice" placeholder="Цена за шт" step="0.01">
+        <button class="accent" onclick="submitTrade()">OK</button>
+    </div>
+    <table id="tradesTable"><thead><tr><th>Предмет</th><th>Тип</th><th>Кол-во</th><th>Цена/шт</th><th>Сумма</th><th>Дата</th><th></th></tr></thead><tbody></tbody></table>
+    <div id="tradeStats"></div>
     </div>
     <div class="screen" id="screen-events">
         <h2>📅 СОБЫТИЯ</h2>
