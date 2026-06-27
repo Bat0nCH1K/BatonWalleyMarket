@@ -1,7 +1,7 @@
-// Wasteland Market Terminal — core.js v5.3.1 (синтаксический фикс)
+// Wasteland Market Terminal — core.js v6.0 (новые сделки: buy/sell раздельно)
 const STORAGE_ITEMS = 'wl_items_v4';
 const STORAGE_PRICES = 'wl_prices_v4';
-const STORAGE_TRADES = 'wl_trades_v4';
+const STORAGE_TRADES = 'wl_trades_v5'; // Новая версия хранилища
 const STORAGE_EVENTS = 'wl_events_v4';
 const STORAGE_PREDICTIONS = 'wl_predictions_v4';
 const STORAGE_BALANCE = 'wl_balance_v4';
@@ -18,10 +18,7 @@ let storageItems = JSON.parse(localStorage.getItem(STORAGE_STORAGE) || '[]');
 let goals = JSON.parse(localStorage.getItem(STORAGE_GOALS) || '[]');
 let selectedItem = null;
 
-// Восстановление lotSize для старых данных
 items = items.map(i => ({ lotSize: 1, ...i }));
-
-// Восстановление поля item для старых целей
 goals = goals.map(g => ({ item: '', ...g }));
 
 function saveAll() {
@@ -66,27 +63,95 @@ function addPriceEntry(time, buy, sell, event, nerf, buff) {
     saveAll(); updatePredictions(selectedItem);
 }
 
-function addTrade(item, buyPrice, sellPrice) {
-    if (!item || isNaN(buyPrice) || isNaN(sellPrice)) return;
-    const profit = sellPrice - buyPrice, profitPct = (profit / buyPrice) * 100;
-    const pred = getPrediction(item);
-    trades.push({ item, buyPrice, sellPrice, buyDate: new Date().toISOString(), sellDate: new Date().toISOString(), profit, profitPct, confidence: pred.confidence });
-    if (!predictions[item]) predictions[item] = [];
-    predictions[item].push({ date: new Date().toISOString(), predicted: pred.signal, actual: profit > 0 ? 1 : 0, confidence: pred.confidence });
-    balance += profit;
-    document.getElementById('balanceInput').value = balance.toFixed(2);
+// === НОВАЯ СИСТЕМА СДЕЛОК ===
+function addTrade(item, type, qty, pricePerUnit) {
+    // type: 'buy' или 'sell'
+    // qty: количество штук (не лотов!)
+    // pricePerUnit: цена за ОДНУ штуку
+    if (!item || !type || isNaN(qty) || isNaN(pricePerUnit)) return;
+    if (qty <= 0 || pricePerUnit <= 0) return;
     
+    const totalCost = pricePerUnit * qty;
+    const now = new Date().toISOString();
+    
+    const trade = {
+        id: Date.now(),
+        item: item,
+        type: type,          // 'buy' или 'sell'
+        qty: qty,            // количество штук
+        pricePerUnit: pricePerUnit,
+        total: totalCost,
+        date: now
+    };
+    
+    if (type === 'buy') {
+        // Покупка: минус голда, плюс на склад
+        if (balance < totalCost) { alert('Не хватает голды! Нужно ' + totalCost.toFixed(0) + ', есть ' + balance.toFixed(0)); return; }
+        balance -= totalCost;
+        document.getElementById('balanceInput').value = balance.toFixed(2);
+        
+        // Добавляем на склад (или увеличиваем существующий)
+        const existing = storageItems.find(s => s.item === item && !s.modded);
+        if (existing) {
+            const totalQty = existing.qty + qty;
+            existing.buyPrice = (existing.buyPrice * existing.qty + totalCost) / totalQty;
+            existing.qty = totalQty;
+        } else {
+            storageItems.push({ item, qty: qty, buyPrice: totalCost / qty, modded: false, date: now });
+        }
+    } else if (type === 'sell') {
+        // Продажа: плюс голда, минус со склада
+        const onStorage = storageItems.filter(s => s.item === item && !s.modded);
+        const totalOnStorage = onStorage.reduce((sum, s) => sum + s.qty, 0);
+        
+        if (totalOnStorage < qty) { alert('Не хватает на складе! Есть ' + totalOnStorage + ', нужно ' + qty); return; }
+        
+        balance += totalCost;
+        document.getElementById('balanceInput').value = balance.toFixed(2);
+        
+        // Убираем со склада (FIFO: сначала самые старые)
+        let toRemove = qty;
+        for (let i = onStorage.length - 1; i >= 0 && toRemove > 0; i--) {
+            const s = onStorage[i];
+            const idx = storageItems.indexOf(s);
+            if (s.qty <= toRemove) {
+                toRemove -= s.qty;
+                storageItems.splice(idx, 1);
+            } else {
+                s.qty -= toRemove;
+                toRemove = 0;
+            }
+        }
+    }
+    
+    trades.push(trade);
+    
+    // Обновляем предсказания
+    if (!predictions[item]) predictions[item] = [];
+    const pred = getPrediction(item);
+    const profit = type === 'buy' ? -totalCost : totalCost;
+    predictions[item].push({
+        date: now,
+        predicted: pred.signal,
+        actual: profit > 0 ? 1 : 0,
+        confidence: pred.confidence
+    });
+    if (predictions[item].length > 50) predictions[item].shift();
+    
+    saveAll();
+}
+
+// === СТАРАЯ ФУНКЦИЯ ДЛЯ СОВМЕСТИМОСТИ (вызывает новую) ===
+function addTradeOld(item, buyPrice, sellPrice) {
+    // Конвертируем старый формат в новый
+    // Если buyPrice < sellPrice — это была покупка а потом продажа
+    // Но мы не знаем сколько штук... используем lotSize
     const itemObj = items.find(i => i.name === item);
     const lotSize = itemObj ? itemObj.lotSize : 1;
-    const existing = storageItems.find(s => s.item === item && !s.modded);
-    if (existing) {
-        const totalQty = existing.qty + lotSize;
-        existing.buyPrice = (existing.buyPrice * existing.qty + buyPrice) / totalQty;
-        existing.qty = totalQty;
-    } else {
-        storageItems.push({ item, qty: lotSize, buyPrice, modded: false, date: new Date().toISOString() });
-    }
-    saveAll();
+    
+    // Записываем как продажу (sellPrice) после покупки (buyPrice)
+    addTrade(item, 'buy', lotSize, buyPrice / lotSize);
+    addTrade(item, 'sell', lotSize, sellPrice / lotSize);
 }
 
 function addToStorage(item, qty, buyPrice, modded) {
@@ -118,6 +183,35 @@ function deleteEvent(index) { events.splice(index, 1); saveAll(); }
 function getActiveEvent() {
     const today = new Date().toISOString().slice(0, 10);
     return events.find(e => e.start <= today && e.end >= today) || null;
+}
+
+// === ПРИБЫЛЬ ПО ПРЕДМЕТУ (сопоставление пар сделок) ===
+function getItemProfit(item) {
+    const itemTrades = trades.filter(t => t.item === item).sort((a,b) => new Date(a.date) - new Date(b.date));
+    let profit = 0;
+    let buyStack = []; // [{qty, price}]
+    
+    for (const t of itemTrades) {
+        if (t.type === 'buy') {
+            buyStack.push({ qty: t.qty, price: t.pricePerUnit });
+        } else {
+            let toSell = t.qty;
+            while (toSell > 0 && buyStack.length > 0) {
+                const first = buyStack[0];
+                const match = Math.min(first.qty, toSell);
+                profit += match * (t.pricePerUnit - first.price);
+                first.qty -= match;
+                toSell -= match;
+                if (first.qty <= 0) buyStack.shift();
+            }
+        }
+    }
+    return profit;
+}
+
+function getTotalProfit() {
+    const allItems = [...new Set(trades.map(t => t.item))];
+    return allItems.reduce((sum, item) => sum + getItemProfit(item), 0);
 }
 
 function getPrediction(item) {
@@ -172,4 +266,4 @@ function getGlobalAccuracy() {
         correct += withActual.filter(p => (p.predicted > 0.5 && p.actual === 1) || (p.predicted <= 0.5 && p.actual === 0)).length;
     });
     return total > 0 ? Math.round((correct / total) * 100) : 0;
-        }
+                }
